@@ -154,7 +154,6 @@
         <field name="model">yaguven.ingresos.wizard</field>
         <field name="report_type">qweb-pdf</field>
         <field name="report_name">yaguven_reporte_ingresos.ingresos_doc</field>
-        <field name="report_file">yaguven_reporte_ingresos.ingresos_doc</field>
         <field name="paperformat_id" ref="paperformat_ingresos"/>
         <field name="print_report_name">'Ingresos %s a %s' % (object.date_from.strftime('%d-%m-%Y'), object.date_to.strftime('%d-%m-%Y'))</field>
     </record>
