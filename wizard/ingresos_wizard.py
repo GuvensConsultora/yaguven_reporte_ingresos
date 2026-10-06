@@ -1,5 +1,4 @@
 # -*- coding: utf-8 -*-
-import base64
 import io
 from collections import defaultdict
 from datetime import datetime, time, timedelta
@@ -213,7 +212,8 @@ class IngresosWizard(models.TransientModel):
         adjunto = self.env['ir.attachment'].create({
             'name': nombre,
             'type': 'binary',
-            'datas': base64.b64encode(output.getvalue()),
+            # Odoo 20: el contenido va en `raw` (ya no existe `datas`).
+            'raw': output.getvalue(),
             'mimetype': 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet',
         })
         return {

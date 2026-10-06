@@ -17,7 +17,7 @@ Diferencia con el 17: en Odoo 20 el mostrador cobra con pagos de POS. Se suman l
 POS (por el diario de su método) y se excluyen los pagos contables que el cierre de caja
 genera a partir de ellos (`pos_session_id`), que si no se contarían dos veces.
 """,
-    "version": "20.0.1.0.0",
+    "version": "20.0.1.0.1",
     "category": "Accounting",
     "author": "Yagüven C.G.",
     "license": "LGPL-3",
