@@ -14,10 +14,11 @@ Port a Odoo 20 de los reportes de ingresos de Lupatini en Odoo 17 (lupatini_repo
   la UI. Un diario sin tipo aparece en «Otros» para que su plata no desaparezca del total.
 
 Diferencia con el 17: en Odoo 20 el mostrador cobra con pagos de POS. Se suman los pagos de
-POS (por el diario de su método) y se excluyen los pagos contables que el cierre de caja
-genera a partir de ellos (`pos_session_id`), que si no se contarían dos veces.
+POS con diario (por el diario de su método) y se excluyen los pagos contables que Odoo crea a
+partir de ellos (`pos_payment_method_id` con diario), que si no se contarían dos veces. Los
+cheques y retenciones del mostrador (yaguven_pos_cheque) entran por su pago contable.
 """,
-    "version": "20.0.1.0.1",
+    "version": "20.0.1.0.2",
     "category": "Accounting",
     "author": "Yagüven C.G.",
     "license": "LGPL-3",

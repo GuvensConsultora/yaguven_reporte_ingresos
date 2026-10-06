@@ -64,9 +64,9 @@ class IngresosWizard(models.TransientModel):
     #  · pagos contables de CLIENTES (recibos, transferencias, cheques…). Los pagos a
     #    proveedores quedan afuera por construcción; los salientes a clientes son las
     #    reversiones (NC devueltas) y restan.
-    #  · pagos de POS (lo que se cobra en el mostrador). Los pagos contables que el cierre
-    #    de caja crea a partir de ellos (pos_session_id) se excluyen: si no, se cuentan dos
-    #    veces.
+    #  · pagos de POS con diario (efectivo, tarjeta, MP del mostrador). Los pagos contables
+    #    que Odoo crea a partir de ellos se excluyen (ver _filas_pagos): si no, se cuentan dos
+    #    veces. Cheques y retenciones del mostrador entran por su pago contable.
     # -------------------------------------------------------------------------
 
     def _limites_utc(self):
@@ -90,7 +90,13 @@ class IngresosWizard(models.TransientModel):
             ('company_id', '=', self.company_id.id),
             ('partner_type', '=', 'customer'),
             ('state', 'not in', ESTADOS_FUERA),
-            ('pos_session_id', '=', False),
+            # Duplicados del POS: el pago contable que Odoo crea desde un pos.payment con diario
+            # (tarjeta, MP: `_create_bank_payment_line`) — ese cobro ya se cuenta como pago de POS.
+            # NO se excluyen los de yaguven_pos_cheque / _settle (cheques y retenciones del
+            # mostrador): llevan pos_session_id pero su medio no tiene diario, y el pos.payment
+            # correspondiente no se cuenta. Sin esto, cheques y retenciones del POS desaparecían.
+            '|', ('pos_payment_method_id', '=', False),
+            ('pos_payment_method_id.journal_id', '=', False),
             ('date', '>=', self.date_from),
             ('date', '<=', self.date_to),
         ], order='date, id')
