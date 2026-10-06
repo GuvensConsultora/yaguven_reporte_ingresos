@@ -1,0 +1,68 @@
+<?xml version="1.0" encoding="utf-8"?>
+<odoo>
+
+    <record id="view_ingresos_wizard_form" model="ir.ui.view">
+        <field name="name">yaguven.ingresos.wizard.form</field>
+        <field name="model">yaguven.ingresos.wizard</field>
+        <field name="arch" type="xml">
+            <form string="Reporte de ingresos">
+                <p class="text-muted">
+                    Lo que entró por cada medio de cobro, en recibos y en el mostrador: sólo
+                    cobros a clientes, menos las reversiones por nota de crédito. No incluye
+                    pagos a proveedores ni la cuenta corriente.
+                </p>
+                <group>
+                    <group>
+                        <field name="date_from"/>
+                        <field name="date_to"/>
+                    </group>
+                    <group>
+                        <!-- Copia invisible sin grupo: el dominio de sucursales la necesita
+                             aunque el usuario no vea el selector de empresa. -->
+                        <field name="company_id" invisible="1"/>
+                        <field name="company_id" groups="base.group_multi_company"/>
+                        <field name="operating_unit_ids"
+                               widget="many2many_tags"
+                               domain="[('company_id', '=', company_id)]"
+                               placeholder="Todas"/>
+                    </group>
+                </group>
+                <footer>
+                    <button name="action_print_pdf" string="PDF" type="object" class="btn-primary"/>
+                    <button name="action_export_excel" string="Excel" type="object" class="btn-primary"/>
+                    <button string="Cancelar" class="btn-secondary" special="cancel"/>
+                </footer>
+            </form>
+        </field>
+    </record>
+
+    <record id="action_ingresos_diario" model="ir.actions.act_window">
+        <field name="name">Reporte diario de ingresos</field>
+        <field name="res_model">yaguven.ingresos.wizard</field>
+        <field name="view_mode">form</field>
+        <field name="target">new</field>
+        <field name="context">{'yaguven_hoy': True}</field>
+    </record>
+
+    <record id="action_ingresos_periodo" model="ir.actions.act_window">
+        <field name="name">Ingresos por período</field>
+        <field name="res_model">yaguven.ingresos.wizard</field>
+        <field name="view_mode">form</field>
+        <field name="target">new</field>
+    </record>
+
+    <menuitem
+        id="menu_ingresos_diario"
+        name="Reporte diario de ingresos"
+        parent="account.menu_finance_reports"
+        action="action_ingresos_diario"
+        sequence="91"/>
+
+    <menuitem
+        id="menu_ingresos_periodo"
+        name="Ingresos por período"
+        parent="account.menu_finance_reports"
+        action="action_ingresos_periodo"
+        sequence="92"/>
+
+</odoo>

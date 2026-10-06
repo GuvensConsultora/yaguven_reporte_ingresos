@@ -1,0 +1,162 @@
+<?xml version="1.0" encoding="utf-8"?>
+<odoo>
+
+    <!-- Apaisado: la tabla por sucursal lleva una columna por medio de cobro. -->
+    <record id="paperformat_ingresos" model="report.paperformat">
+        <field name="name">Reporte de ingresos (A4 apaisado)</field>
+        <field name="format">A4</field>
+        <field name="orientation">Landscape</field>
+        <field name="margin_top">38</field>
+        <field name="margin_bottom">15</field>
+        <field name="margin_left">10</field>
+        <field name="margin_right">10</field>
+        <field name="header_spacing">33</field>
+        <field name="dpi">90</field>
+    </record>
+
+    <template id="ingresos_doc">
+        <t t-call="web.html_container">
+            <t t-call="web.external_layout">
+                <t t-set="company" t-value="docs[:1].company_id or env.company"/>
+                <t t-set="mon" t-value="{'widget': 'monetary', 'display_currency': company.currency_id}"/>
+                <style>
+                    .lip { font-size: 9.5px; }
+                    .lip h4 { margin: 0 0 2px 0; font-size: 15px; }
+                    .lip .sub { margin: 0 0 6px 0; }
+                    .lip h6 { margin: 8px 0 3px 0; font-size: 11px; font-weight: bold; }
+                    .lip table.t { border-collapse: collapse; margin-bottom: 4px; }
+                    .lip table.t th, .lip table.t td { border: 1px solid #999999; padding: 1px 5px; }
+                    .lip table.t thead th, .lip table.t thead th span { background-color: #1F4E79 !important; color: #FFFFFF !important; font-weight: bold; }
+                    .lip table.t tr.tot td { background-color: #DDEBF7; font-weight: bold; }
+                    .lip .r { text-align: right; }
+                    .lip .nota { color: #444444; font-size: 8.5px; margin: 2px 0 4px 0; }
+                </style>
+                <div class="page lip">
+                    <h4>
+                        Lo que entró del <span t-out="datos['desde']"/> al <span t-out="datos['hasta']"/>
+                    </h4>
+                    <p class="sub">
+                        <strong t-out="datos['empresa']"/> · sólo cobros a clientes (recibos y mostrador),
+                        menos las reversiones por nota de crédito.
+                        <t t-if="datos['filtro_sucursales']">
+                            <br/>Sucursales: <span t-out="datos['filtro_sucursales']"/>
+                        </t>
+                    </p>
+
+                    <h6>Por medio de cobro</h6>
+                    <table class="t" style="width:75%;">
+                        <thead>
+                            <tr>
+                                <th>Medio</th>
+                                <th class="r">Cobrado</th>
+                                <th class="r">Reversiones (NC)</th>
+                                <th class="r">Neto que entró</th>
+                                <th class="r">Cantidad</th>
+                            </tr>
+                        </thead>
+                        <tbody>
+                            <tr t-if="not datos['medios']">
+                                <td colspan="5" class="text-center">Sin cobros en el período.</td>
+                            </tr>
+                            <tr t-foreach="datos['medios']" t-as="m">
+                                <td t-out="m['medio']"/>
+                                <td class="r"><span t-out="m['cobro']" t-options="mon"/></td>
+                                <td class="r"><span t-out="m['reversion']" t-options="mon"/></td>
+                                <td class="r"><span t-out="m['neto']" t-options="mon"/></td>
+                                <td class="r" t-out="m['n']"/>
+                            </tr>
+                        </tbody>
+                        <tfoot>
+                            <tr class="tot">
+                                <td>TOTAL</td>
+                                <td class="r"><span t-out="datos['total_cobro']" t-options="mon"/></td>
+                                <td class="r"><span t-out="datos['total_reversion']" t-options="mon"/></td>
+                                <td class="r"><span t-out="datos['total_neto']" t-options="mon"/></td>
+                                <td/>
+                            </tr>
+                        </tfoot>
+                    </table>
+
+                    <table class="t" style="width:60%;">
+                        <thead>
+                            <tr>
+                                <th>Aparte (no está en el total de arriba)</th>
+                                <th class="r">Importe</th>
+                                <th class="r">Cantidad</th>
+                            </tr>
+                        </thead>
+                        <tbody>
+                            <tr>
+                                <td>Retenciones que nos hicieron los clientes (no es plata)</td>
+                                <td class="r"><span t-out="datos['retenciones']" t-options="mon"/></td>
+                                <td class="r" t-out="datos['retenciones_n']"/>
+                            </tr>
+                            <tr>
+                                <td>Notas de crédito a clientes del período</td>
+                                <td class="r"><span t-out="datos['nc']" t-options="mon"/></td>
+                                <td class="r" t-out="datos['nc_n']"/>
+                            </tr>
+                            <tr>
+                                <td>Pagos a proveedores (excluidos)</td>
+                                <td class="r"><span t-out="datos['proveedores']" t-options="mon"/></td>
+                                <td class="r" t-out="datos['proveedores_n']"/>
+                            </tr>
+                        </tbody>
+                    </table>
+                    <p class="nota">
+                        Las notas de crédito con reversión del cobro ya están restadas arriba, en
+                        «Reversiones (NC)». Las demás bajan la deuda del cliente pero no mueven plata.
+                        Las transferencias entre cajas y la cuenta corriente del mostrador no aparecen porque no entra plata.
+                    </p>
+
+                    <!-- Con una sola fila «Sin sucursal» (la S.H.) la tabla no agrega nada. -->
+                    <t t-if="len(datos['sucursales']) &gt; 1">
+                        <h6>Neto por sucursal y medio</h6>
+                        <table class="t" style="width:100%;">
+                            <thead>
+                                <tr>
+                                    <th>Sucursal</th>
+                                    <th t-foreach="datos['columnas']" t-as="col" class="r" t-out="col"/>
+                                    <th class="r">Total</th>
+                                </tr>
+                            </thead>
+                            <tbody>
+                                <tr t-foreach="datos['sucursales']" t-as="s">
+                                    <td t-out="s['sucursal']"/>
+                                    <td t-foreach="s['valores']" t-as="v" class="r">
+                                        <span t-if="v" t-out="v" t-options="mon"/>
+                                        <span t-else="">—</span>
+                                    </td>
+                                    <td class="r"><span t-out="s['total']" t-options="mon"/></td>
+                                </tr>
+                            </tbody>
+                            <tfoot>
+                                <tr class="tot">
+                                    <td>TOTAL</td>
+                                    <td t-foreach="datos['totales_sucursal']" t-as="v" class="r">
+                                        <span t-out="v" t-options="mon"/>
+                                    </td>
+                                    <td class="r"><span t-out="datos['total_neto']" t-options="mon"/></td>
+                                </tr>
+                            </tfoot>
+                        </table>
+                    </t>
+                    <p class="nota">
+                        Pago por pago: botón «Excel» del mismo asistente, solapa «Detalle».
+                    </p>
+                </div>
+            </t>
+        </t>
+    </template>
+
+    <record id="action_report_ingresos" model="ir.actions.report">
+        <field name="name">Reporte de ingresos</field>
+        <field name="model">yaguven.ingresos.wizard</field>
+        <field name="report_type">qweb-pdf</field>
+        <field name="report_name">yaguven_reporte_ingresos.ingresos_doc</field>
+        <field name="report_file">yaguven_reporte_ingresos.ingresos_doc</field>
+        <field name="paperformat_id" ref="paperformat_ingresos"/>
+        <field name="print_report_name">'Ingresos %s a %s' % (object.date_from.strftime('%d-%m-%Y'), object.date_to.strftime('%d-%m-%Y'))</field>
+    </record>
+
+</odoo>
