@@ -13,12 +13,13 @@ Port a Odoo 20 de los reportes de ingresos de Lupatini en Odoo 17 (lupatini_repo
 - El medio de cobro sale del «Tipo en reporte de ingresos» del diario, configurable desde
   la UI. Un diario sin tipo aparece en «Otros» para que su plata no desaparezca del total.
 
-Diferencia con el 17: en Odoo 20 el mostrador cobra con pagos de POS. Se suman los pagos de
-POS con diario (por el diario de su método) y se excluyen los pagos contables que Odoo crea a
-partir de ellos (`pos_payment_method_id` con diario), que si no se contarían dos veces. Los
-cheques y retenciones del mostrador (yaguven_pos_cheque) entran por su pago contable.
+Diferencia con el 17: en Odoo 20 el mostrador cobra desde el POS. Lo cobrado se lee de lo
+contable y no de los pos.payment: los pagos que crea el POS (tarjeta, MP, cheques,
+retenciones, cobros de deuda) son account.payment de cliente, y el efectivo es un renglón de
+la caja cuya contrapartida es una cuenta a cobrar. Así entran también los cobros de deuda
+(«liquidar facturas»), que no dejan pos.payment, y nada se cuenta dos veces.
 """,
-    "version": "20.0.1.0.2",
+    "version": "20.0.1.1.0",
     "category": "Accounting",
     "author": "Yagüven C.G.",
     "license": "LGPL-3",

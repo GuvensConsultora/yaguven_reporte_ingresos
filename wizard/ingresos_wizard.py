@@ -1,9 +1,7 @@
 # -*- coding: utf-8 -*-
 import io
 from collections import defaultdict
-from datetime import datetime, time, timedelta
-
-from zoneinfo import ZoneInfo
+from datetime import datetime, time
 
 from dateutil.relativedelta import relativedelta
 
@@ -23,7 +21,6 @@ MEDIOS = [t for t in TIPOS_INGRESO if t[0] != RETENCION]
 SIN_SUCURSAL = 'Sin sucursal'
 # Estados de account.payment en Odoo 20 que NO son plata movida.
 ESTADOS_FUERA = ('draft', 'canceled', 'rejected')
-TZ_DEFECTO = 'America/Argentina/Buenos_Aires'
 
 
 # Desde el menú «Reporte diario de ingresos» (contexto `yaguven_hoy`) las dos fechas son hoy;
@@ -64,17 +61,10 @@ class IngresosWizard(models.TransientModel):
     #  · pagos contables de CLIENTES (recibos, transferencias, cheques…). Los pagos a
     #    proveedores quedan afuera por construcción; los salientes a clientes son las
     #    reversiones (NC devueltas) y restan.
-    #  · pagos de POS con diario (efectivo, tarjeta, MP del mostrador). Los pagos contables
-    #    que Odoo crea a partir de ellos se excluyen (ver _filas_pagos): si no, se cuentan dos
-    #    veces. Cheques y retenciones del mostrador entran por su pago contable.
+    #  · lo cobrado en el mostrador, desde lo contable (no desde pos.payment): los pagos que
+    #    crea el POS entran en _filas_pagos, y el efectivo en _filas_efectivo_pos. Así entran
+    #    también los cobros de deuda («liquidar facturas»), que no dejan pos.payment.
     # -------------------------------------------------------------------------
-
-    def _limites_utc(self):
-        """Desde 00:00 hasta 24:00 hora local, en UTC (payment_date de POS es datetime)."""
-        tz, utc = ZoneInfo(self.env.user.tz or TZ_DEFECTO), ZoneInfo('UTC')
-        desde = datetime.combine(self.date_from, time.min, tz).astimezone(utc)
-        hasta = datetime.combine(self.date_to + timedelta(days=1), time.min, tz).astimezone(utc)
-        return desde.replace(tzinfo=None), hasta.replace(tzinfo=None)
 
     def _fila(self, fecha, recibo, pago, cliente, ou, diario, entra):
         tipo = diario.yaguven_ingreso_tipo or 'other'
@@ -86,51 +76,54 @@ class IngresosWizard(models.TransientModel):
         }
 
     def _filas_pagos(self):
+        """Pagos contables de clientes, TODOS: recibos y también los que crea el POS (tarjeta,
+        MP, cheques, retenciones, cobros de deuda). No se leen los pos.payment, así que no hay
+        nada que contar dos veces."""
         pagos = self.env['account.payment'].search([
             ('company_id', '=', self.company_id.id),
             ('partner_type', '=', 'customer'),
             ('state', 'not in', ESTADOS_FUERA),
-            # Duplicados del POS: el pago contable que Odoo crea desde un pos.payment con diario
-            # (tarjeta, MP: `_create_bank_payment_line`) — ese cobro ya se cuenta como pago de POS.
-            # NO se excluyen los de yaguven_pos_cheque / _settle (cheques y retenciones del
-            # mostrador): llevan pos_session_id pero su medio no tiene diario, y el pos.payment
-            # correspondiente no se cuenta. Sin esto, cheques y retenciones del POS desaparecían.
-            '|', ('pos_payment_method_id', '=', False),
-            ('pos_payment_method_id.journal_id', '=', False),
             ('date', '>=', self.date_from),
             ('date', '<=', self.date_to),
         ], order='date, id')
         filas = []
         for p in pagos:
             entra = p.payment_type == 'inbound'
-            f = self._fila(p.date, p.payment_group_id.display_name or '', p.name,
-                           p.partner_id.display_name or '',
-                           p.journal_id.operating_unit_id or p.move_id.operating_unit_id,
+            f = self._fila(p.date, p.payment_group_id.display_name or p.pos_session_id.name or '',
+                           p.name, p.partner_id.display_name or '',
+                           p.pos_session_id.config_id.operating_unit_id
+                           or p.journal_id.operating_unit_id or p.move_id.operating_unit_id,
                            p.journal_id, entra)
             f['importe'] = p.amount if entra else -p.amount
             filas.append(f)
         return filas
 
-    def _filas_pos(self):
-        desde, hasta = self._limites_utc()
-        pagos = self.env['pos.payment'].search([
+    def _filas_efectivo_pos(self):
+        """Efectivo del mostrador: en Odoo 20 no es un account.payment sino un renglón de la
+        caja (`_create_cash_payment_line`). Entra el renglón cuya contrapartida es una cuenta A
+        COBRAR (cobro de una venta o de una deuda). Quedan afuera los ingresos/retiros de caja
+        (contrapartida: cuenta transitoria del diario) y la diferencia del cierre (ganancia o
+        pérdida): no son cobros a clientes."""
+        renglones = self.env['account.bank.statement.line'].search([
             ('company_id', '=', self.company_id.id),
-            ('payment_date', '>=', desde),
-            ('payment_date', '<', hasta),
-            # Sin diario = «Cuenta corriente»: no entra plata, queda como deuda del cliente.
-            ('payment_method_id.journal_id', '!=', False),
-        ], order='payment_date, id')
+            ('pos_session_id', '!=', False),
+            ('date', '>=', self.date_from),
+            ('date', '<=', self.date_to),
+            ('move_id.state', '=', 'posted'),
+        ], order='date, id')
         filas = []
-        for p in pagos:
-            # El vuelto (is_change) es parte del cobro, no una devolución.
-            entra = p.amount >= 0 or p.is_change
-            f = self._fila(fields.Datetime.context_timestamp(self, p.payment_date).date(),
-                           p.session_id.name or '', p.pos_order_id.name or '',
-                           p.pos_order_id.partner_id.display_name or '',
-                           p.session_id.config_id.operating_unit_id
-                           or p.payment_method_id.journal_id.operating_unit_id,
-                           p.payment_method_id.journal_id, entra)
-            f['importe'] = p.amount
+        for r in renglones:
+            contra = r.move_id.line_ids.filtered(
+                lambda l: l.account_id != r.journal_id.default_account_id)
+            if not contra or any(l.account_id.account_type != 'asset_receivable' for l in contra):
+                continue
+            entra = r.amount >= 0
+            f = self._fila(r.date, r.pos_session_id.name or '', r.payment_ref or r.move_id.name,
+                           r.partner_id.display_name or '',
+                           r.pos_session_id.config_id.operating_unit_id
+                           or r.journal_id.operating_unit_id,
+                           r.journal_id, entra)
+            f['importe'] = r.amount
             filas.append(f)
         return filas
 
@@ -141,7 +134,7 @@ class IngresosWizard(models.TransientModel):
         # Todo en la empresa elegida, no en la activa del usuario: con otra activa, las
         # reglas multiempresa ocultaban los pagos y el reporte daba cero (O17, 05/10/2026).
         self = self.with_company(self.company_id)
-        filas = self._filas_pagos() + self._filas_pos()
+        filas = self._filas_pagos() + self._filas_efectivo_pos()
         if self.operating_unit_ids:
             filas = [f for f in filas if f['ou'] in self.operating_unit_ids]
         filas.sort(key=lambda f: (f['fecha'], f['sucursal']))
